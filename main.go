@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"errors"
 	"flag"
 	"github.com/chromedp/cdproto/cdp"
@@ -22,31 +21,27 @@ const DownloadSuffix = "crdownload"
 
 type Env struct {
 	url, username, password, period string
-	loginDelay                      int
-	debug                           bool
+	loginDelay, downloadWaitTime    int
+	prod, debug                     bool
 }
 
 func parseParameters() Env {
 	env := Env{}
 
-	prod := flag.Bool("prod", false, "production mode")
-	flag.IntVar(&env.loginDelay, "w", 0, "seconds to wait after login")
+	flag.BoolVar(&env.prod, "prod", false, "production mode")
+	flag.IntVar(&env.loginDelay, "w", 5, "seconds to wait after login")
+	flag.IntVar(&env.downloadWaitTime, "d", 90, "seconds to wait for downloading a file")
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "30", "")
-	flag.BoolVar(&env.debug, "debug", false, "print debug logs")
+	flag.BoolVar(&env.debug, "v", false, "print debug logs")
 
 	flag.Parse()
 
-	var defaultDelay int
-	if *prod {
-		env.url, defaultDelay = "https://secure5.arcot.com/vpas/admin/", 15
+	if env.prod {
+		env.url = "https://secure5.arcot.com/vpas/admin/"
 	} else {
-		env.url, defaultDelay = "https://preview5.arcot.com/vpas/admin/", 5
-	}
-
-	if env.loginDelay == 0 {
-		env.loginDelay = defaultDelay
+		env.url = "https://preview5.arcot.com/vpas/admin/"
 	}
 
 	if env.debug {
@@ -56,7 +51,7 @@ func parseParameters() Env {
 	return env
 }
 
-func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) bool, debug bool) {
+func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, debug bool) {
 	var err error
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -80,20 +75,33 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) bool, debug boo
 		c.Wait()
 	}()
 
-	if taskFunc(ctx, c) {
-		newFile, err := waitForNewFile(WaitDuration, true)
-		if err == nil {
-			log.Printf("Got new file %s", newFile)
-		} else {
-			log.Printf("%v", err)
-		}
+	err = taskFunc(ctx, c)
+	if err != nil {
+		log.Printf("%v", err)
+		return
+	}
+
+	newFile, err := waitForNewFile(WaitDuration, debug)
+	if err == nil {
+		log.Printf("Got new file %s", newFile)
+	} else {
+		log.Printf("%v", err)
 	}
 }
 
-func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) bool {
-	return func(ctx context.Context, c *chromedp.CDP) bool {
+func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
+	// dropdown to select 30, 60, 90 minutes for download
+	// in Arcot's site, test and production uses different name for the same control
+	var periodDropdown string
+	if env.prod {
+		periodDropdown = `//select[@name="reportForm:j_id_2o"]`
+	} else {
+		periodDropdown = `//select[@name="reportForm:j_id_2n"]`
+	}
+
+	return func(ctx context.Context, c *chromedp.CDP) error {
 		var html string
-		c.Run(ctx, chromedp.Tasks{
+		return c.Run(ctx, chromedp.Tasks{
 			page.SetDownloadBehavior(page.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(cwd()),
 			chromedp.Navigate(env.url + "index.jsp?bank=i18n/en_US&locale=en_US"),
 			chromedp.WaitVisible(`//input[@name="adminname"]`),
@@ -102,28 +110,30 @@ func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) bool {
 			chromedp.Submit(`//input[@name="Submit"]`),
 			chromedp.Sleep(time.Duration(env.loginDelay) * time.Second),
 			chromedp.EvaluateAsDevTools("document.getElementsByName('topFrame')[0].contentWindow.document.body.outerHTML;", &html),
-		})
-
-		if !strings.Contains(html, "adminlogout") {
-			log.Printf("Login failed")
-			return false
-		}
-
-		log.Printf("Login success")
-		c.Run(ctx, chromedp.Tasks{
+			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+				// when login fails, eval above javascript will cause an "Uncaught exception"
+				// if the code reaches here login must have succeeded
+				log.Printf("Login success")
+				return nil
+			}),
 			chromedp.Navigate(env.url + "report/ReportByIssuerAndDate.jsf?reportId=AllTransactions&bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
 			chromedp.WaitVisible(`//input[@name="reportForm:btnExport"]`),
-			chromedp.SetValue(`//select[@name="reportForm:j_id_2o"]`, env.period),
+			chromedp.SetValue(periodDropdown, env.period),
 			chromedp.Click(`//input[@name="reportForm:btnExport"]`, chromedp.NodeVisible),
 			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
 				log.Printf("Download submitted")
 				return nil
 			}),
+			chromedp.Sleep(2 * time.Second),
+			chromedp.Evaluate(`document.getElementsByClassName("reportFilterHeadingTable")[0].outerHTML`, &html),
+			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+				if strings.Contains(html, "No matching records found") {
+					return errors.New("no data available")
+				}
+				return nil
+			}),
 		})
-
-		return true
 	}
-
 }
 
 func cwd() string {
@@ -133,6 +143,7 @@ func cwd() string {
 	}
 	return dir
 }
+
 func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -150,6 +161,7 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 		return "", err
 	}
 
+	log.Printf("Waiting for file download")
 	started := false
 	for {
 		select {
@@ -161,13 +173,9 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 			// Chrome starts a download with a temporarily file name
 			// and rename the file when download is complete
 			if event.Op&fsnotify.Rename == fsnotify.Rename {
-				if file:= event.Name; strings.HasSuffix(file, DownloadSuffix) {
-					log.Printf("Download %s completed", file)
-					if testCSV(strings.TrimSuffix(file, DownloadSuffix)) {
-						return file, nil
-					} else {
-						return file, errors.New("file is not a valid CSV file")
-					}
+				if strings.HasSuffix(event.Name, DownloadSuffix) {
+					log.Printf("Download %s completed", event.Name)
+					return event.Name, nil
 				}
 			} else if event.Op&fsnotify.Write == fsnotify.Write {
 				if strings.HasSuffix(event.Name, DownloadSuffix) {
@@ -184,25 +192,6 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 				return "", errors.New("no file downloaded")
 			}
 		}
-	}
-}
-
-func testCSV(fileName string) bool {
-	f, err := os.Open(fileName)
-	if err != nil {
-		log.Printf("%v", err)
-		return false
-	}
-	defer f.Close()
-
-	r := csv.NewReader(f)
-	records, err := r.ReadAll()
-	if err == nil {
-		log.Printf("%s has %d records", fileName, len(records))
-		return true
-	} else {
-		log.Printf("%v", err)
-		return false
 	}
 }
 
