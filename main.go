@@ -15,8 +15,6 @@ import (
 	"time"
 )
 
-// wait before considering a download has failed
-const WaitDuration = 120 * time.Second
 const DownloadSuffix = "crdownload"
 
 type Env struct {
@@ -30,7 +28,7 @@ func parseParameters() Env {
 
 	flag.BoolVar(&env.prod, "prod", false, "production mode")
 	flag.IntVar(&env.loginDelay, "w", 5, "seconds to wait after login")
-	flag.IntVar(&env.downloadWaitTime, "d", 90, "seconds to wait for downloading a file")
+	flag.IntVar(&env.downloadWaitTime, "d", 120, "seconds to wait for downloading a file")
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "30", "")
@@ -51,7 +49,7 @@ func parseParameters() Env {
 	return env
 }
 
-func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, debug bool) {
+func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, wait int, debug bool) {
 	var err error
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -81,12 +79,12 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, debug bo
 		return
 	}
 
-	newFile, err := waitForNewFile(WaitDuration, debug)
-	if err == nil {
-		log.Printf("Got new file %s", newFile)
-	} else {
-		log.Printf("%v", err)
+	newFile, err := waitForNewFile(time.Duration(wait)*time.Second, debug)
+	if err != nil {
+		log.Fatal(err)
 	}
+
+	log.Printf("Got new file %s", newFile)
 }
 
 func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
@@ -174,8 +172,8 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 			// and rename the file when download is complete
 			if event.Op&fsnotify.Rename == fsnotify.Rename {
 				if strings.HasSuffix(event.Name, DownloadSuffix) {
-					log.Printf("Download %s completed", event.Name)
-					return event.Name, nil
+					file := strings.TrimSuffix(event.Name, DownloadSuffix)
+					return file, nil
 				}
 			} else if event.Op&fsnotify.Write == fsnotify.Write {
 				if strings.HasSuffix(event.Name, DownloadSuffix) {
@@ -197,5 +195,5 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 
 func main() {
 	env := parseParameters()
-	runWithChrome(fetchFromArcot(env), env.debug)
+	runWithChrome(fetchFromArcot(env), env.downloadWaitTime, env.debug)
 }
