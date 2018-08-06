@@ -30,3 +30,6 @@ go build
 GOOS=windows GOBARCH=amd64 go build
 
 ```
+
+### Known issues
+1. Chrome will prompt whether to cancel the download or continue even after the complete CSV file has been downloaded. Select Cancel should be safe and Chrome browser will close automatically.
