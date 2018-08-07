@@ -23,6 +23,14 @@ type Env struct {
 	prod, debug                     bool
 }
 
+func cwd() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	return dir
+}
+
 func parseParameters() Env {
 	env := Env{}
 
@@ -49,7 +57,7 @@ func parseParameters() Env {
 	return env
 }
 
-func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, wait int, debug bool) {
+func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, debug bool) {
 	var err error
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -75,24 +83,14 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, wait int
 
 	err = taskFunc(ctx, c)
 	if err != nil {
+		// don't use Fatal because we need to deter functions to run
 		log.Printf("%v", err)
 		return
 	}
-
-	newFile, err := waitForNewFile(time.Duration(wait)*time.Second, debug)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Printf("Got new file %s", newFile)
-	// sleep a bit for the Chrome to realize download has finished
-	// otherwise it'll prompt Cancel download or continue when we try
-	// to close the browser
-	time.Sleep(2 * time.Second)
 }
 
 func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
-	// dropdown to select 30, 60, 90 minutes for download
+	// drop down to select 30, 60, 90 minutes for download
 	// in Arcot's site, test and production uses different name for the same control
 	var periodDropdown string
 	if env.prod {
@@ -105,12 +103,14 @@ func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
 		var html string
 		return c.Run(ctx, chromedp.Tasks{
 			page.SetDownloadBehavior(page.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(cwd()),
+			// login
 			chromedp.Navigate(env.url + "index.jsp?bank=i18n/en_US&locale=en_US"),
 			chromedp.WaitVisible(`//input[@name="adminname"]`),
 			chromedp.SendKeys(`//input[@name="adminname"]`, env.username),
 			chromedp.SendKeys(`//input[@name="password"]`, env.password),
 			chromedp.Submit(`//input[@name="Submit"]`),
 			chromedp.Sleep(time.Duration(env.loginDelay) * time.Second),
+			// detect if a frameset is displayed in the browser
 			chromedp.EvaluateAsDevTools("document.getElementsByName('topFrame')[0].contentWindow.document.body.outerHTML;", &html),
 			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
 				// when login fails, eval above javascript will cause an "Uncaught exception"
@@ -118,8 +118,10 @@ func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
 				log.Printf("Login success")
 				return nil
 			}),
+			// launch the All Transaction download page in full page mode
 			chromedp.Navigate(env.url + "report/ReportByIssuerAndDate.jsf?reportId=AllTransactions&bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
 			chromedp.WaitVisible(`//input[@name="reportForm:btnExport"]`),
+			// enter download period and click submit button
 			chromedp.SetValue(periodDropdown, env.period),
 			chromedp.Click(`//input[@name="reportForm:btnExport"]`, chromedp.NodeVisible),
 			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
@@ -127,26 +129,37 @@ func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
 				return nil
 			}),
 			chromedp.Sleep(2 * time.Second),
+			// check if "no matching records found" is displayed on the screen
 			chromedp.Evaluate(`document.getElementsByClassName("reportFilterHeadingTable")[0].outerHTML`, &html),
 			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
 				if strings.Contains(html, "No matching records found") {
-					return errors.New("no data available")
+					println("no data available")
+					return nil
 				}
+
+				newFile, err := waitForDownload(time.Duration(env.downloadWaitTime)*time.Second, env.debug)
+				if err != nil {
+					return err
+				}
+				log.Printf("Downloaded file %s", newFile)
+				return nil
+			}),
+			// sleep a bit for the Chrome to realize download has finished
+			// otherwise it'll prompt Cancel download or continue when we try
+			// to close the browser
+			chromedp.Sleep(1 * time.Second),
+			// logout
+			chromedp.Navigate(env.url + "adminlogout.jsp?bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
+			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+				log.Printf("Logout")
 				return nil
 			}),
 		})
 	}
+	return nil
 }
 
-func cwd() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	return dir
-}
-
-func waitForNewFile(duration time.Duration, debug bool) (string, error) {
+func waitForDownload(duration time.Duration, debug bool) (string, error) {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		log.Printf("%v", err)
@@ -199,5 +212,5 @@ func waitForNewFile(duration time.Duration, debug bool) (string, error) {
 
 func main() {
 	env := parseParameters()
-	runWithChrome(fetchFromArcot(env), env.downloadWaitTime, env.debug)
+	runWithChrome(fetchFromArcot(env), env.debug)
 }
