@@ -85,6 +85,10 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, wait int
 	}
 
 	log.Printf("Got new file %s", newFile)
+	// sleep a bit for the Chrome to realize download has finished
+	// otherwise it'll prompt Cancel download or continue when we try
+	// to close the browser
+	time.Sleep(2 * time.Second)
 }
 
 func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
