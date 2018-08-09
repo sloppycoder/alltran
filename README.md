@@ -30,3 +30,6 @@ go build
 GOOS=windows GOBARCH=amd64 go build
 
 ```
+
+### Known Issues
+1. On Linux (Chrome 68.0.3440.106) and Windwos 10 (Chrome 64.0.3282.119) program hangs when performing context.Wait. On windows, chrome process will remain after this program is killed. this problem does not occur on OS X (Chrome 68.0.3440.84)
