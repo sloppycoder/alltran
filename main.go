@@ -9,6 +9,7 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 	"github.com/fsnotify/fsnotify"
+	"github.com/robfig/cron"
 	"log"
 	"os"
 	"strings"
@@ -18,9 +19,9 @@ import (
 const DownloadSuffix = "crdownload"
 
 type Env struct {
-	url, username, password, period string
-	loginDelay, downloadWaitTime    int
-	prod, debug                     bool
+	url, username, password, period, cron string
+	loginDelay, downloadWaitTime          int
+	prod, debug                           bool
 }
 
 func cwd() string {
@@ -40,6 +41,7 @@ func parseParameters() Env {
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "30", "")
+	flag.StringVar(&env.cron, "cron", "", "cron expression")
 	flag.BoolVar(&env.debug, "v", false, "print debug logs")
 
 	flag.Parse()
@@ -128,7 +130,7 @@ func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
 				log.Printf("Download submitted")
 				return nil
 			}),
-			chromedp.Sleep(2 * time.Second),
+			chromedp.Sleep(1 * time.Second),
 			// check if "no matching records found" is displayed on the screen
 			chromedp.Evaluate(`document.getElementsByClassName("reportFilterHeadingTable")[0].outerHTML`, &html),
 			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
@@ -212,5 +214,13 @@ func waitForDownload(duration time.Duration, debug bool) (string, error) {
 
 func main() {
 	env := parseParameters()
-	runWithChrome(fetchFromArcot(env), env.debug)
+	if env.cron == "" {
+		runWithChrome(fetchFromArcot(env), env.debug)
+	} else {
+		c := cron.New()
+		c.AddFunc(env.cron, func() {
+			runWithChrome(fetchFromArcot(env), env.debug)
+		})
+		c.Start()
+	}
 }
