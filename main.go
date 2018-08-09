@@ -210,10 +210,12 @@ func waitForDownload(ch chan error, duration time.Duration, debug bool) error {
 			if event.Op&fsnotify.Rename == fsnotify.Rename &&
 				strings.HasSuffix(file, DownloadSuffix) {
 				log.Print("Downloaded ", strings.TrimSuffix(file, DownloadSuffix))
+				timer.Stop()
 				ch <- nil
 			} else if event.Op&fsnotify.Write == fsnotify.Write &&
 				strings.HasSuffix(file, TransactionFileSuffix) {
 				log.Print("Downloaded ", file)
+				timer.Stop()
 				ch <- nil
 			}
 		case err := <-watcher.Errors:
