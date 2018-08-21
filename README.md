@@ -18,10 +18,11 @@ Make sure Chrome browser is installed
 ### Build
 This program is written using [Go programming language](http://golang.org). It uses the new [chromedp](https://github.com/chromedp/chromedp) driver. No JRE, Selenium or chrome driver required.
 
+[Dep](https://github.com/golang/dep) is required.
+
 ```
-go get -u github.com/chromedp/chromedp
-go get -u github.com/fsnotify/fsnotify
-go get -u golang.org/x/sys/...
+
+dep ensure
 
 # build binary for your OS
 go build
