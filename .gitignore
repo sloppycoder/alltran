@@ -2,4 +2,6 @@
 *.exe
 3ds_download
 *.csv
+vendor/
+alltran*
 
