@@ -17,8 +17,7 @@ import (
 	"time"
 )
 
-const DownloadSuffix = "crdownload"
-const TransactionFileSuffix = "csv"
+const ProgramMaxRuntime = 300 * time.Second
 
 type Env struct {
 	url, username, password, period string
@@ -42,10 +41,10 @@ func parseParameters() Env {
 	flag.BoolVar(&env.debug, "v", false, "print debug logs")
 	flag.BoolVar(&env.headless, "headless", false, "use Chrome headless mode")
 	flag.IntVar(&env.loginDelay, "w", 5, "seconds to wait after login")
-	flag.IntVar(&env.downloadWaitTime, "d", 120, "seconds to wait for downloading a file")
+	//flag.IntVar(&env.downloadWaitTime, "d", 120, "seconds to wait for downloading a file")
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
-	flag.StringVar(&env.period, "period", "30", "")
+	flag.StringVar(&env.period, "period", "60", "")
 	flag.StringVar(&env.cron, "cron", "", "cron expression")
 	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
 
@@ -67,7 +66,7 @@ func parseParameters() Env {
 func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOption chromedp.Option, debug bool) {
 	var err error
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), ProgramMaxRuntime)
 	defer cancel()
 
 	// create chrome instance
@@ -91,9 +90,19 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOp
 		}
 
 		// wait for chrome to finish
-		err = c.Wait()
-		if err != nil {
-			log.Fatal(err)
+		// Wait() will hang on Windows and Linux with Chrome headless mode
+		// we'll need to exit the program when this happens
+		ch := make(chan error)
+		go func() {
+			c.Wait()
+			ch <- nil
+		}()
+
+		select {
+		case err = <-ch:
+			log.Println("chrome closed")
+		case <-time.After(10 * time.Second):
+			log.Println("chrome didn't shutdown within 10s")
 		}
 	}()
 
@@ -105,94 +114,106 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOp
 	}
 }
 
-func fetchFromArcot(env Env) func(context.Context, *chromedp.CDP) error {
-	// drop down to select 30, 60, 90 minutes for download
-	// in Arcot's site, test and production uses different name for the same control
-	var periodDropdown string
-	if env.prod {
-		periodDropdown = `//select[@name="reportForm:j_id_2o"]`
-	} else {
-		periodDropdown = `//select[@name="reportForm:j_id_2n"]`
-	}
-
-	return func(ctx context.Context, c *chromedp.CDP) error {
-		var html string
-		ch := make(chan error)
-		return c.Run(ctx, chromedp.Tasks{
-			page.SetDownloadBehavior(page.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(cwd()),
-			// login
-			chromedp.Navigate(env.url + "index.jsp?bank=i18n/en_US&locale=en_US"),
-			chromedp.WaitVisible(`//input[@name="adminname"]`),
-			chromedp.SendKeys(`//input[@name="adminname"]`, env.username),
-			chromedp.SendKeys(`//input[@name="password"]`, env.password),
-			chromedp.Submit(`//input[@name="Submit"]`),
-			chromedp.Sleep(time.Duration(env.loginDelay) * time.Second),
-			// detect if a frameset is displayed in the browser
-			chromedp.EvaluateAsDevTools("document.getElementsByName('topFrame')[0].contentWindow.document.body.outerHTML;", &html),
-			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
-				// when login fails, eval above javascript will cause an "Uncaught exception"
-				// if the code reaches here login must have succeeded
-				log.Printf("Login success")
-				return nil
-			}),
-			// launch the All Transaction download page in full page mode
-			chromedp.Navigate(env.url + "report/ReportByIssuerAndDate.jsf?reportId=AllTransactions&bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
-			chromedp.WaitVisible(`//input[@name="reportForm:btnExport"]`),
-			// enter download period and click submit button
-			chromedp.SetValue(periodDropdown, env.period),
-			chromedp.Click(`//input[@name="reportForm:btnExport"]`, chromedp.NodeVisible),
-			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
-				go waitForDownload(ch, time.Duration(env.downloadWaitTime)*time.Second, env.debug)
-				return nil
-			}),
-			chromedp.Sleep(2 * time.Second),
-			// check if "no matching records found" is displayed on the screen
-			chromedp.Evaluate(`document.getElementsByClassName("reportFilterHeadingTable")[0].outerHTML`, &html),
-			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
-				if strings.Contains(html, "No matching records found") {
-					println("no data available")
-					return nil
-				}
-
-				err := <-ch
-				if err != nil {
-					return err
-				}
-				return nil
-			}),
-			// sleep a bit for the Chrome to realize download has finished
-			// otherwise it'll prompt Cancel download or continue when we try
-			// to close the browser
-			chromedp.Sleep(1 * time.Second),
-			// logout
-			chromedp.Navigate(env.url + "adminlogout.jsp?bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
-			chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
-				log.Printf("Logout")
-				return nil
-			}),
-		})
-	}
-	return nil
+func logout(ctx context.Context, c *chromedp.CDP, env Env) error {
+	return c.Run(ctx, chromedp.Tasks{
+		chromedp.Navigate(env.url + "adminlogout.jsp?bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
+		chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+			log.Printf("Logged out")
+			return nil
+		}),
+	})
 }
 
-func waitForDownload(ch chan error, duration time.Duration, debug bool) error {
+func login(ctx context.Context, c *chromedp.CDP, env Env) error {
+	var html string
+	return c.Run(ctx, chromedp.Tasks{
+		page.SetDownloadBehavior(page.SetDownloadBehaviorBehaviorAllow).WithDownloadPath(cwd()),
+		// login
+		chromedp.Navigate(env.url + "index.jsp?bank=i18n/en_US&locale=en_US"),
+		chromedp.WaitVisible(`//input[@name="adminname"]`),
+		chromedp.SendKeys(`//input[@name="adminname"]`, env.username),
+		chromedp.SendKeys(`//input[@name="password"]`, env.password),
+		chromedp.Submit(`//input[@name="Submit"]`),
+		chromedp.Sleep(time.Duration(env.loginDelay) * time.Second),
+		// detect if a frameset is displayed in the browser
+		chromedp.EvaluateAsDevTools("document.getElementsByName('topFrame')[0].contentWindow.document.body.outerHTML;", &html),
+		chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+			// when login fails, eval above javascript will cause an "Uncaught exception"
+			// if the code reaches here login must have succeeded
+			log.Printf("Logged in")
+			return nil
+		}),
+	})
+}
+
+func downloadAllTransactions(ctx context.Context, c *chromedp.CDP, env Env) error {
+	var html string
+	var file string
+
+	exportButton := `//input[@name="reportForm:btnExport"]`
+	return c.Run(ctx, chromedp.Tasks{
+		// launch the All Transaction download page in full page mode
+		chromedp.Navigate(env.url + "report/ReportByIssuerAndDate.jsf?reportId=AllTransactions&bank=i18n/en_US&locale=en_US&loggedinlevel=2&auth=1"),
+		chromedp.WaitVisible(exportButton),
+		// enter download period and click submit button
+		chromedp.SetValue(`//select[@name="reportForm:j_id_2n"]`, env.period),
+		chromedp.Click(exportButton, chromedp.NodeVisible),
+		chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+			log.Printf("Select %s minutes and click Export button", env.period)
+			return nil
+		}),
+		//chromedp.WaitVisible(exportButton),
+		chromedp.Sleep(2 * time.Second),
+		// check if "no matching records found" is displayed on the screen
+		chromedp.Evaluate(`document.getElementsByClassName("reportFilterHeadingTable")[0].outerHTML`, &html),
+		chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {
+			if strings.Contains(html, "No matching records found") {
+				return errors.New("no data available")
+			}
+
+			err := waitForDownload(&file, true)
+			if err != nil {
+				log.Println(err)
+			} else {
+				log.Printf("Downloaded file %s", file)
+			}
+			return nil
+		}),
+		// sleep a bit for the Chrome to realize download has finished
+		// otherwise it'll prompt Cancel download or continue when we try
+		// to close the browser
+		chromedp.Sleep(1 * time.Second),
+	})
+}
+
+func fetchTransactionList(env Env) func(context.Context, *chromedp.CDP) error {
+
+	return func(ctx context.Context, c *chromedp.CDP) error {
+		err := login(ctx, c, env)
+		if err != nil {
+			return err
+		}
+
+		defer logout(ctx, c, env)
+
+		return downloadAllTransactions(ctx, c, env)
+	}
+}
+
+func waitForDownload(file *string, debug bool) error {
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		log.Printf("%v", err)
 		return err
 	}
 	defer watcher.Close()
 
-	timer := time.NewTimer(duration)
-	defer timer.Stop()
-
 	err = watcher.Add(cwd())
 	if err != nil {
-		log.Printf("%v", err)
 		return err
 	}
 
 	log.Printf("Waiting for file download")
+	hasEvent := false
 	for {
 		select {
 		case event := <-watcher.Events:
@@ -200,32 +221,23 @@ func waitForDownload(ch chan error, duration time.Duration, debug bool) error {
 				log.Println("fsnotify:", event)
 			}
 
-			file := event.Name
-			if !strings.Contains(file, "AllTransactions") {
-				continue
-			}
-
-			// Chrome starts a download with a temporarily file name
-			// and rename the file when download is complete
-			if event.Op&fsnotify.Rename == fsnotify.Rename &&
-				strings.HasSuffix(file, DownloadSuffix) {
-				log.Print("Downloaded ", strings.TrimSuffix(file, DownloadSuffix))
-				timer.Stop()
-				ch <- nil
-			} else if event.Op&fsnotify.Write == fsnotify.Write &&
-				strings.HasSuffix(file, TransactionFileSuffix) {
-				log.Print("Downloaded ", file)
-				timer.Stop()
-				ch <- nil
+			if strings.Contains(event.Name, "AllTransactions") {
+				hasEvent = true
+				*file = event.Name
 			}
 		case err := <-watcher.Errors:
-			log.Println("error:", err)
-			ch <- err
-		case <-timer.C:
-			ch <- errors.New("no file downloaded")
+			return err
+		case <-time.After(15 * time.Second):
+			// wait for 15 seconds. if any event received in last 15s, keep waiting
+			// if not, return, asusming nothing more is going to be written
+			if hasEvent {
+				hasEvent = false
+			} else {
+				log.Println("...download stopped...")
+				return nil
+			}
 		}
 	}
-	return nil
 }
 
 func main() {
@@ -246,13 +258,13 @@ func main() {
 
 	chromeOptions := chromedp.WithRunnerOptions(options...)
 	if env.cron == "" {
-		runWithChrome(fetchFromArcot(env), chromeOptions, env.debug)
+		runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
 	} else {
 		log.Println("starting cron scheduler with ", env.cron)
 
 		c := cron.New()
 		c.AddFunc(env.cron, func() {
-			runWithChrome(fetchFromArcot(env), chromeOptions, env.debug)
+			runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
 		})
 		c.Start()
 	}

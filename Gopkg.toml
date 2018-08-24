@@ -30,8 +30,9 @@
   name = "github.com/chromedp/cdproto"
 
 [[constraint]]
+  branch = "master"
   name = "github.com/chromedp/chromedp"
-  version = "0.1.2"
+#  version = "0.1.2"
 
 [[constraint]]
   name = "github.com/fsnotify/fsnotify"
