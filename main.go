@@ -250,6 +250,13 @@ func waitForDownload(file *string, debug bool) error {
 func main() {
 	env := parseParameters()
 
+	if env.headless && runtime.GOOS == "windows" {
+		env.headless = false
+		log.Println("Headless mode on Windows is not supported")
+		// with Chrome 64.0.3282.119  on Windows 10, launching Chrome in headless mode
+		// will be left running after this program exits. we disable the support for now
+	}
+
 	options := []runner.CommandLineOption{
 		runner.Flag("headless", env.headless),
 		runner.Flag("disable-gpu", env.headless),
