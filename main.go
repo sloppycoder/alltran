@@ -13,6 +13,7 @@ import (
 	"github.com/robfig/cron"
 	"log"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -171,7 +172,7 @@ func downloadAllTransactions(ctx context.Context, c *chromedp.CDP, env Env) erro
 				return errors.New("no data available")
 			}
 
-			err := waitForDownload(&file, true)
+			err := waitForDownload(&file, env.debug)
 			if err != nil {
 				log.Println(err)
 			} else {
@@ -201,6 +202,12 @@ func fetchTransactionList(env Env) func(context.Context, *chromedp.CDP) error {
 }
 
 func waitForDownload(file *string, debug bool) error {
+	wait := 3 * time.Second
+	if runtime.GOOS == "windows" {
+		// on Windows. fanotify event fires very infrequently
+		wait = 15 * time.Second
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -227,9 +234,9 @@ func waitForDownload(file *string, debug bool) error {
 			}
 		case err := <-watcher.Errors:
 			return err
-		case <-time.After(15 * time.Second):
+		case <-time.After(wait):
 			// wait for 15 seconds. if any event received in last 15s, keep waiting
-			// if not, return, asusming nothing more is going to be written
+			// if not, return, assuming nothing more is going to be written
 			if hasEvent {
 				hasEvent = false
 			} else {
