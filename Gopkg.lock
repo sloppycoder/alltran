@@ -116,12 +116,12 @@
   revision = "03f2033d19d5860aef995fe360ac7d395cd8ce65"
 
 [[projects]]
-  digest = "1:ed615c5430ecabbb0fb7629a182da65ecee6523900ac1ac932520860878ffcad"
-  name = "github.com/robfig/cron"
-  packages = ["."]
+  digest = "1:77c752dff90a292864c7b14e97a2a6719e019f53a7d3c554f6d15f1325cf0a50"
+  name = "go-hep.org/x/hep"
+  packages = ["csvutil"]
   pruneopts = "UT"
-  revision = "b41be1df696709bb6395fe435af20370037c0b4c"
-  version = "v1.1"
+  revision = "8996f1533f6cb88c40cab45467f1263d048f1eeb"
+  version = "v0.14.0"
 
 [[projects]]
   branch = "master"
@@ -152,7 +152,7 @@
     "github.com/chromedp/chromedp",
     "github.com/chromedp/chromedp/runner",
     "github.com/fsnotify/fsnotify",
-    "github.com/robfig/cron",
+    "go-hep.org/x/hep/csvutil",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
