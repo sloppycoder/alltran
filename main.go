@@ -10,7 +10,6 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/runner"
 	"github.com/fsnotify/fsnotify"
-	"github.com/robfig/cron"
 	"log"
 	"os"
 	"runtime"
@@ -19,10 +18,11 @@ import (
 )
 
 const ProgramMaxRuntime = 300 * time.Second
+const MaxDownloadAttempts = 3
 
 type Env struct {
 	url, username, password, period string
-	cron, proxy                     string
+	proxy                           string
 	loginDelay, downloadWaitTime    int
 	headless, prod, debug           bool
 }
@@ -48,7 +48,6 @@ func parseParameters() Env {
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")
-	flag.StringVar(&env.cron, "cron", "", "cron expression")
 	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
 
 	flag.Parse()
@@ -151,7 +150,6 @@ func login(ctx context.Context, c *chromedp.CDP, env Env) error {
 
 func downloadAllTransactions(ctx context.Context, c *chromedp.CDP, env Env) error {
 	var html string
-	var file string
 
 	exportButton := `//input[@name="reportForm:btnExport"]`
 	return c.Run(ctx, chromedp.Tasks{
@@ -177,9 +175,8 @@ func downloadAllTransactions(ctx context.Context, c *chromedp.CDP, env Env) erro
 			err := waitForDownload(env.debug)
 			if err != nil {
 				log.Println(err)
-			} else {
-				log.Printf("Downloaded file %s", file)
 			}
+
 			return nil
 		}),
 		// sleep a bit for the Chrome to realize download has finished
@@ -267,19 +264,18 @@ func main() {
 	}
 
 	chromeOptions := chromedp.WithRunnerOptions(options...)
-	if env.cron == "" {
+	for i := 0; i < MaxDownloadAttempts; i++ {
 		runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
-	} else {
-		log.Println("starting cron scheduler with ", env.cron)
 
-		c := cron.New()
-		c.AddFunc(env.cron, func() {
-			runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
-		})
-		c.Start()
+		if transactionFile != "" {
+			log.Println("Downloaded ", transactionFile)
+			break
+		}
 
-		for {
-			runtime.Gosched()
+		if i < MaxDownloadAttempts-1 {
+			time.Sleep(10 * time.Second)
+		} else {
+			log.Println("Downloaded failed")
 		}
 	}
 }
