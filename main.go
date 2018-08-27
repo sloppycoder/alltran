@@ -27,6 +27,8 @@ type Env struct {
 	headless, prod, debug           bool
 }
 
+var transactionFile string
+
 func cwd() string {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -172,7 +174,7 @@ func downloadAllTransactions(ctx context.Context, c *chromedp.CDP, env Env) erro
 				return errors.New("no data available")
 			}
 
-			err := waitForDownload(&file, env.debug)
+			err := waitForDownload(env.debug)
 			if err != nil {
 				log.Println(err)
 			} else {
@@ -201,11 +203,11 @@ func fetchTransactionList(env Env) func(context.Context, *chromedp.CDP) error {
 	}
 }
 
-func waitForDownload(file *string, debug bool) error {
-	wait := 3 * time.Second
+func waitForDownload(debug bool) error {
+	wait := 10 * time.Second
 	if runtime.GOOS == "windows" {
 		// on Windows. fanotify event fires very infrequently
-		wait = 15 * time.Second
+		wait = 20 * time.Second
 	}
 
 	watcher, err := fsnotify.NewWatcher()
@@ -220,7 +222,6 @@ func waitForDownload(file *string, debug bool) error {
 	}
 
 	log.Printf("Waiting for file download")
-	hasEvent := false
 	for {
 		select {
 		case event := <-watcher.Events:
@@ -229,20 +230,15 @@ func waitForDownload(file *string, debug bool) error {
 			}
 
 			if strings.Contains(event.Name, "AllTransactions") {
-				hasEvent = true
-				*file = event.Name
+				transactionFile = event.Name
 			}
 		case err := <-watcher.Errors:
 			return err
 		case <-time.After(wait):
-			// wait for 15 seconds. if any event received in last 15s, keep waiting
+			// wait for some time. if any event received in last 15s, keep waiting
 			// if not, return, assuming nothing more is going to be written
-			if hasEvent {
-				hasEvent = false
-			} else {
-				log.Println("...download stopped...")
-				return nil
-			}
+			log.Printf("...download stopped for %s...", transactionFile)
+			return nil
 		}
 	}
 }
@@ -281,5 +277,9 @@ func main() {
 			runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
 		})
 		c.Start()
+
+		for {
+			runtime.Gosched()
+		}
 	}
 }
