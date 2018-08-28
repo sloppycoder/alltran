@@ -16,7 +16,7 @@ const MaxDownloadAttempts = 3
 
 type Env struct {
 	url, username, password, period string
-	proxy, out                      string
+	proxy, influxdb                 string
 	loginDelay, downloadWaitTime    int
 	headless, prod, debug           bool
 }
@@ -42,7 +42,7 @@ func parseParameters() Env {
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")
 	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
-	flag.StringVar(&env.out, "o", "", "convert CSV input to JSON format and write to this file.")
+	flag.StringVar(&env.influxdb, "influxdb", "", "convert CSV input send to influxdb")
 
 	flag.Parse()
 
@@ -97,8 +97,8 @@ func main() {
 		}
 	}
 
-	if transactionFile != "" && env.out != "" {
-		err := writeJson(transactionFile, env.out)
+	if transactionFile != "" && env.influxdb != "" {
+		err := csvToInfluxDB(transactionFile, "http://10.23.218.219:8086", "tds")
 		if err != nil {
 			log.Fatal(err)
 		}

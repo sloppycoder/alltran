@@ -87,6 +87,18 @@
   version = "v1.2.0"
 
 [[projects]]
+  digest = "1:18f8bac7ae238f1d06b347d40fea2a37d029e11ddeac57163182a08c780955f2"
+  name = "github.com/influxdata/influxdb"
+  packages = [
+    "client/v2",
+    "models",
+    "pkg/escape",
+  ]
+  pruneopts = "UT"
+  revision = "7adf7f9d14ef38517d4bb19301b7f8d9a26d19dd"
+  version = "v1.6.2"
+
+[[projects]]
   branch = "master"
   digest = "1:901625a0300fa83074dcf2510424c26a19dc3edadf67b34ca45a78f879ac4b0c"
   name = "github.com/knq/snaker"
@@ -114,14 +126,6 @@
   ]
   pruneopts = "UT"
   revision = "03f2033d19d5860aef995fe360ac7d395cd8ce65"
-
-[[projects]]
-  digest = "1:77c752dff90a292864c7b14e97a2a6719e019f53a7d3c554f6d15f1325cf0a50"
-  name = "go-hep.org/x/hep"
-  packages = ["csvutil"]
-  pruneopts = "UT"
-  revision = "8996f1533f6cb88c40cab45467f1263d048f1eeb"
-  version = "v0.14.0"
 
 [[projects]]
   branch = "master"
@@ -152,7 +156,7 @@
     "github.com/chromedp/chromedp",
     "github.com/chromedp/chromedp/runner",
     "github.com/fsnotify/fsnotify",
-    "go-hep.org/x/hep/csvutil",
+    "github.com/influxdata/influxdb/client/v2",
   ]
   solver-name = "gps-cdcl"
   solver-version = 1
