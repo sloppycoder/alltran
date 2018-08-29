@@ -19,7 +19,7 @@ const (
 	Unknown FaultType = 3
 )
 
-const BatchSize = 100
+const BatchSize = 200
 
 var countries = map[string]string{
 	"STANDARD CHARTERED BANK - MC Credit":   "IN",
@@ -68,7 +68,6 @@ func countryForIssuer(issuer string) string {
 }
 
 func parseRecord(t []string) (time.Time, map[string]string, map[string]interface{}) {
-
 	amount, err := strconv.ParseFloat(t[13], 64)
 	if err != nil {
 		amount = 0.0
@@ -122,6 +121,7 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 	return timestamp, tags, fields
 }
 func csvToInfluxDB(csvFile string, url string, database string) error {
+	log.Printf("Writing transactions in %s to InfluxDB at %s\n", csvFile, url)
 
 	b, err := ioutil.ReadFile(csvFile)
 	if err != nil {
@@ -148,14 +148,6 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 	defer c.Close()
 
 	var bp client.BatchPoints
-	bp, err = client.NewBatchPoints(client.BatchPointsConfig{
-		Database:  database,
-		Precision: "s",
-	})
-	if err != nil {
-		return err
-	}
-
 	for n, t := range trans {
 		// throw away the header row
 		if n == 0 {
@@ -164,13 +156,15 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 
 		if n%BatchSize == 0 {
 			if len(bp.Points()) > 0 {
-				log.Printf("Writing batch at %n\n", n)
 				err = c.Write(bp)
 				if err != nil {
 					return err
 				}
+				bp = nil
 			}
+		}
 
+		if bp == nil {
 			bp, err = client.NewBatchPoints(client.BatchPointsConfig{
 				Database:  database,
 				Precision: "s",
@@ -190,9 +184,11 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 		bp.AddPoint(pt)
 	}
 
-	err = c.Write(bp)
-	if err != nil {
-		return err
+	if bp != nil {
+		err = c.Write(bp)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil

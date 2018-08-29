@@ -16,12 +16,12 @@ const MaxDownloadAttempts = 3
 
 type Env struct {
 	url, username, password, period string
-	proxy, influxdb                 string
+	proxy                           string
 	loginDelay, downloadWaitTime    int
 	headless, prod, debug           bool
 }
 
-var transactionFile string
+var transactionFile, influxdbUrl string
 
 func cwd() string {
 	dir, err := os.Getwd()
@@ -42,7 +42,8 @@ func parseParameters() Env {
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")
 	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
-	flag.StringVar(&env.influxdb, "influxdb", "", "convert CSV input send to influxdb")
+	flag.StringVar(&influxdbUrl, "influxdb", "http://127.0.0.1:8086", "InfluxDB URL to send transaction records to")
+	flag.StringVar(&transactionFile, "csv", "", "CSV file to process. Specify file here will bypass the download logic")
 
 	flag.Parse()
 
@@ -82,23 +83,25 @@ func main() {
 		log.Println("Options:", options)
 	}
 
-	chromeOptions := chromedp.WithRunnerOptions(options...)
-	for i := 0; i < MaxDownloadAttempts; i++ {
-		runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
+	if transactionFile == "" {
+		chromeOptions := chromedp.WithRunnerOptions(options...)
+		for i := 0; i < MaxDownloadAttempts; i++ {
+			runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
 
-		if transactionFile != "" {
-			log.Println("Downloaded ", transactionFile)
-			break
-		}
+			if transactionFile != "" {
+				log.Println("Downloaded ", transactionFile)
+				break
+			}
 
-		if i < MaxDownloadAttempts-1 {
-			log.Println("No file downloaded, retrying...")
-			time.Sleep(10 * time.Second)
+			if i < MaxDownloadAttempts-1 {
+				log.Println("No file downloaded, retrying...")
+				time.Sleep(10 * time.Second)
+			}
 		}
 	}
 
-	if transactionFile != "" && env.influxdb != "" {
-		err := csvToInfluxDB(transactionFile, "http://10.23.218.219:8086", "tds")
+	if transactionFile != "" && influxdbUrl != "" {
+		err := csvToInfluxDB(transactionFile, influxdbUrl, "tds")
 		if err != nil {
 			log.Fatal(err)
 		}
