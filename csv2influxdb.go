@@ -102,8 +102,7 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 
 	tags := map[string]string{
 		"country": countryForIssuer(t[0]),
-		"status":  status,
-		"fault":   string(fault),
+		"fault":   strconv.Itoa(int(fault)),
 	}
 
 	fields := map[string]interface{}{
@@ -116,6 +115,7 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 		"currency":       t[12],
 		"amount":         amount,
 		"callout_status": t[23],
+		"status":         status,
 	}
 
 	return timestamp, tags, fields
