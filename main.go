@@ -17,7 +17,6 @@ const MaxDownloadAttempts = 3
 type Env struct {
 	url, username, password, period string
 	proxy                           string
-	loginDelay, downloadWaitTime    int
 	headless, prod, debug           bool
 }
 
@@ -37,7 +36,6 @@ func parseParameters() Env {
 	flag.BoolVar(&env.prod, "prod", false, "production mode")
 	flag.BoolVar(&env.debug, "v", false, "print debug logs")
 	flag.BoolVar(&env.headless, "headless", false, "use Chrome headless mode")
-	flag.IntVar(&env.loginDelay, "w", 5, "seconds to wait after login")
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")

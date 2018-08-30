@@ -2,6 +2,7 @@
 *.exe
 3ds_download
 *.csv
+*.bat
 vendor/
 alltran*
 

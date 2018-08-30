@@ -86,7 +86,7 @@ func login(ctx context.Context, c *chromedp.CDP, env Env) error {
 		chromedp.SendKeys(`//input[@name="adminname"]`, env.username),
 		chromedp.SendKeys(`//input[@name="password"]`, env.password),
 		chromedp.Submit(`//input[@name="Submit"]`),
-		chromedp.Sleep(time.Duration(env.loginDelay) * time.Second),
+		chromedp.Sleep(5 * time.Second),
 		// detect if a frameset is displayed in the browser
 		chromedp.EvaluateAsDevTools("document.getElementsByName('topFrame')[0].contentWindow.document.body.outerHTML;", &html),
 		chromedp.ActionFunc(func(ctxt context.Context, h cdp.Executor) error {

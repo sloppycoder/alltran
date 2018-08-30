@@ -120,6 +120,7 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 
 	return timestamp, tags, fields
 }
+
 func csvToInfluxDB(csvFile string, url string, database string) error {
 	log.Printf("Writing transactions in %s to InfluxDB at %s\n", csvFile, url)
 
