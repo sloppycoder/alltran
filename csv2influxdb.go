@@ -28,32 +28,32 @@ var countries = map[string]string{
 	"STANDARD CHARTERED BANK - VISA Debit":  "IN",
 	"STANDARD CHARTERED BANK - MC":          "SG",
 	"STANDARD CHARTERED BANK - VISA":        "SG",
-	"UAE":       "AE",
-	"BD":        "BD",
-	"Bahrain":   "BH",
-	"Brunei":    "BN",
-	"Botswana":  "BW",
-	"Ivoire":    "CI",
-	"Ghana":     "GH",
-	"Gambia":    "GM",
-	"(HK)":      "HK",
-	"Indonesia": "ID",
-	"Jersey":    "JE",
-	"Jordan":    "JO",
-	"Kenya":     "KE",
-	"Srilanka":  "LK",
-	"Malaysia":  "MY",
-	"MALAYSIA":  "MY",
-	"Nigeria":   "NE",
-	"Nepal":     "NP",
-	"Pakistan":  "PK",
-	"Thailand":  "TH",
-	"Taiwan":    "TW",
-	"Tanzania":  "TZ",
-	"Uganda":    "UA",
-	"Vietnam":   "VN",
-	"Zambia":    "ZM",
-	"Zimbabwe":  "ZW",
+	"UAE":                                   "AE",
+	"BD":                                    "BD",
+	"Bahrain":                               "BH",
+	"Brunei":                                "BN",
+	"Botswana":                              "BW",
+	"Ivoire":                                "CI",
+	"Ghana":                                 "GH",
+	"Gambia":                                "GM",
+	"(HK)":                                  "HK",
+	"Indonesia":                             "ID",
+	"Jersey":                                "JE",
+	"Jordan":                                "JO",
+	"Kenya":                                 "KE",
+	"Srilanka":                              "LK",
+	"Malaysia":                              "MY",
+	"MALAYSIA":                              "MY",
+	"Nigeria":                               "NE",
+	"Nepal":                                 "NP",
+	"Pakistan":                              "PK",
+	"Thailand":                              "TH",
+	"Taiwan":                                "TW",
+	"Tanzania":                              "TZ",
+	"Uganda":                                "UA",
+	"Vietnam":                               "VN",
+	"Zambia":                                "ZM",
+	"Zimbabwe":                              "ZW",
 }
 
 func countryForIssuer(issuer string) string {
@@ -191,6 +191,8 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 			return err
 		}
 	}
+
+	log.Println("Done")
 
 	return nil
 }
