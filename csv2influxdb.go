@@ -103,6 +103,10 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 	tags := map[string]string{
 		"country": countryForIssuer(t[0]),
 		"fault":   strconv.Itoa(int(fault)),
+		// file contains mutliple transaction with same timestamp
+		// we add pan to tag in order to ensure transaction get updated
+		// propertly
+		"pan": t[5],
 	}
 
 	fields := map[string]interface{}{
