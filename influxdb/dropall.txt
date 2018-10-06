@@ -1,0 +1,5 @@
+DROP CONTINUOUS QUERY "cq_tran_stat" ON "tds"
+DROP RETENTION POLICY "ops" on "tds"
+DROP RETENTION POLICY "raw" ON "tds"
+DROP DATABASE "tds"
+

@@ -1,0 +1,6 @@
+# DDL
+CREATE DATABASE "tds"
+CREATE RETENTION POLICY "raw" ON tds DURATION 7d REPLICATION 1
+CREATE RETENTION POLICY "ops" ON tds DURATION 90d REPLICATION 1
+
+CREATE CONTINUOUS QUERY "cq_tran_stat" ON "tds" RESAMPLE EVERY 30m FOR 1d BEGIN SELECT count("status") AS "count_status" INTO "tds"."ops"."transtats" FROM "tds"."raw"."transactions" GROUP BY time(5m), "country", "fault" FILL(null) END
