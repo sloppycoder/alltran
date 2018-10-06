@@ -171,8 +171,9 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 
 		if bp == nil {
 			bp, err = client.NewBatchPoints(client.BatchPointsConfig{
-				Database:  database,
-				Precision: "s",
+				Database:        database,
+				RetentionPolicy: "raw",
+				Precision:       "s",
 			})
 
 			if err != nil {
