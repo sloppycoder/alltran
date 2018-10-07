@@ -125,17 +125,43 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 	return timestamp, tags, fields
 }
 
+// read CSV file and skip the lines before and including the header record
+func readCsv(csvFile string) ([][]string, error) {
+	bytes, err := ioutil.ReadFile(csvFile)
+	if err != nil {
+		return nil, err
+	}
+
+	s := string(bytes)
+	r := csv.NewReader(strings.NewReader(s[strings.Index(s, "Issuer Name"):]))
+	records, err := r.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	return records[1:], err
+}
+
+// calculate the first and last index of a slice
+func nextBatch(curr, length int) (int, int, bool) {
+	if curr < 0 || length <= 0 {
+		return 0, 0, true
+	}
+
+	first, last, isEnd := curr, curr+BatchSize, false
+	if last > length {
+		last = length
+		isEnd = true
+	}
+
+	return first, last, isEnd
+}
+
+//
 func csvToInfluxDB(csvFile string, url string, database string) error {
 	log.Printf("Writing transactions in %s to InfluxDB at %s\n", csvFile, url)
 
-	b, err := ioutil.ReadFile(csvFile)
-	if err != nil {
-		return err
-	}
-
-	s := string(b)
-	r := csv.NewReader(strings.NewReader(s[strings.Index(s, "Issuer Name"):]))
-	trans, err := r.ReadAll()
+	trans, err := readCsv(csvFile)
 	if err != nil {
 		return err
 	}
@@ -152,52 +178,40 @@ func csvToInfluxDB(csvFile string, url string, database string) error {
 
 	defer c.Close()
 
-	var bp client.BatchPoints
-	for n, t := range trans {
-		// throw away the header row
-		if n == 0 {
-			continue
-		}
+	first, last, total := 0, 0, len(trans)
+	var isEnd bool
+	for {
+		bp, _ := client.NewBatchPoints(client.BatchPointsConfig{
+			Database:        database,
+			RetentionPolicy: "raw",
+			Precision:       "s",
+		})
 
-		if n%BatchSize == 0 {
-			if len(bp.Points()) > 0 {
-				err = c.Write(bp)
-				if err != nil {
-					return err
-				}
-				bp = nil
+		first, last, isEnd = nextBatch(first, total)
+		//fmt.Printf(" [ %d : %d ]\n", first , last)
+		for _, rec := range trans[first:last] {
+			timestamp, tags, fields := parseRecord(rec)
+			pt, err := client.NewPoint("transactions", tags, fields, timestamp)
+			if err == nil {
+				bp.AddPoint(pt)
 			}
 		}
 
-		if bp == nil {
-			bp, err = client.NewBatchPoints(client.BatchPointsConfig{
-				Database:        database,
-				RetentionPolicy: "raw",
-				Precision:       "s",
-			})
-
+		if len(bp.Points()) > 0 {
+			err = c.Write(bp)
 			if err != nil {
 				return err
 			}
 		}
 
-		timestamp, tags, fields := parseRecord(t)
-		pt, err := client.NewPoint("transactions", tags, fields, timestamp)
-		if err != nil {
-			return err
-		}
+		first = last
 
-		bp.AddPoint(pt)
-	}
-
-	if bp != nil {
-		err = c.Write(bp)
-		if err != nil {
-			return err
+		if isEnd {
+			break
 		}
 	}
 
-	log.Println("Done")
+	log.Printf("Written %d records", total)
 
 	return nil
 }
