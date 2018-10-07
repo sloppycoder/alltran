@@ -71,10 +71,15 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 		amount = 0.0
 	}
 
-	timestamp, err := time.Parse("2006-01-02 03:04:05 PM CST", t[24])
+	// in CA's CSV file CST stands for +0800. we use replace with actual offset
+	// to avoid confusing with Central Standard Time
+	format := "2006-01-02 03:04:05 PM -0700"
+	timestamp, err := time.Parse(format, strings.Replace(t[24], "CST", "+0800", -1))
 	if err != nil {
 		timestamp = time.Now()
 	}
+
+	// fmt.Printf("%s -> %s, %s\n", t[24], timestamp.Format(time.RFC822Z), timestamp.UTC())
 
 	status, reason := t[18], t[31]
 	fields := map[string]interface{}{
