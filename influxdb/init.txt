@@ -3,4 +3,19 @@ CREATE DATABASE "tds"
 CREATE RETENTION POLICY "raw" ON tds DURATION 7d REPLICATION 1
 CREATE RETENTION POLICY "ops" ON tds DURATION 90d REPLICATION 1
 
-CREATE CONTINUOUS QUERY "cq_tran_stat" ON "tds" RESAMPLE EVERY 30m FOR 1d BEGIN SELECT count("status") AS "count_status" INTO "tds"."ops"."transtats" FROM "tds"."raw"."transactions" GROUP BY time(5m), "country", "fault" FILL(null) END
+DROP CONTINUOUS QUERY "cq_tran_stat" ON "tds"
+
+CREATE CONTINUOUS QUERY "cq_tran_stat" ON "tds"
+RESAMPLE EVERY 15m FOR 2h
+BEGIN
+  SELECT
+    sum("fault_none") AS "success_count",
+    sum("fault_ca") as "ca_err_count",
+    sum("fault_scb") as "scb_err_count",
+    sum("fault_other") as "other_err_count",
+    sum("fault_scb") + sum("fault_ca") + sum("fault_other") AS "failure_count",
+    count("trans_proxypan") AS "total"
+  INTO "tds"."ops"."transtats"
+  FROM "tds"."raw"."transactions"
+  GROUP BY time(5m), "country" FILL(null)
+END

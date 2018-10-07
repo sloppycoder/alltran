@@ -10,16 +10,14 @@ import (
 	"time"
 )
 
-type FaultType int8
+const BatchSize = 200
 
 const (
-	None    FaultType = 0
-	CA      FaultType = 1
-	SCB     FaultType = 2
-	Unknown FaultType = 3
+	FAULT_NONE  = "fault_none"
+	FAULT_CA    = "fault_ca"
+	FAULT_SCB   = "fault_scb"
+	FAULT_OTHER = "fault_other"
 )
-
-const BatchSize = 200
 
 var countries = map[string]string{
 	"STANDARD CHARTERED BANK - MC Credit":   "IN",
@@ -79,38 +77,7 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 	}
 
 	status, reason := t[18], t[31]
-	var fault FaultType
-
-	switch status {
-	case "Successful":
-		fault = None
-	case "Unavailable":
-		fault = SCB
-	case "N/A":
-		if reason == "Abandoned" || reason == "" {
-			fault = None
-		} else {
-			fault = Unknown
-		}
-	case "Failed":
-		if strings.Contains(reason, "GENERAL_EXCEPTION") {
-			fault = CA
-		} else {
-			fault = None
-		}
-	}
-
-	tags := map[string]string{
-		"country": countryForIssuer(t[0]),
-		"fault":   strconv.Itoa(int(fault)),
-		// file contains mutliple transaction with same timestamp
-		// we add pan to tag in order to ensure transaction get updated
-		// propertly
-		"pan": t[5],
-	}
-
 	fields := map[string]interface{}{
-		"cardnum":        t[5],
 		"proxypan":       t[6],
 		"trans_proxypan": t[7],
 		"issuer":         t[0],
@@ -120,6 +87,37 @@ func parseRecord(t []string) (time.Time, map[string]string, map[string]interface
 		"amount":         amount,
 		"callout_status": t[23],
 		"status":         status,
+		FAULT_NONE:       0,
+		FAULT_SCB:        0,
+		FAULT_CA:         0,
+		FAULT_OTHER:      0,
+	}
+
+	switch status {
+	case "Successful":
+		fields[FAULT_NONE] = 1
+	case "Unavailable":
+		fields[FAULT_SCB] = 1
+	case "N/A":
+		if reason == "Abandoned" || reason == "" {
+			fields[FAULT_NONE] = 1
+		} else {
+			fields[FAULT_OTHER] = 1
+		}
+	case "Failed":
+		if strings.Contains(reason, "GENERAL_EXCEPTION") {
+			fields[FAULT_CA] = 1
+		} else {
+			fields[FAULT_NONE] = 1
+		}
+	}
+
+	tags := map[string]string{
+		"country": countryForIssuer(t[0]),
+		// file contains mutliple transaction with same timestamp
+		// we add pan to tag in order to ensure transaction get updated
+		// property
+		"pan": t[5],
 	}
 
 	return timestamp, tags, fields
