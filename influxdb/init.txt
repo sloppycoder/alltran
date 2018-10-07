@@ -5,16 +5,16 @@ CREATE RETENTION POLICY "ops" ON tds DURATION 90d REPLICATION 1
 
 DROP CONTINUOUS QUERY "cq_tran_stat" ON "tds"
 
+
 CREATE CONTINUOUS QUERY "cq_tran_stat" ON "tds"
 RESAMPLE EVERY 15m FOR 2h
 BEGIN
   SELECT
-    sum("fault_none") AS "success_count",
-    sum("fault_ca") as "ca_err_count",
-    sum("fault_scb") as "scb_err_count",
-    sum("fault_other") as "other_err_count",
-    sum("fault_scb") + sum("fault_ca") + sum("fault_other") AS "failure_count",
-    count("trans_proxypan") AS "total"
+    sum("fault_ca") AS "ca_err_count",
+    sum("fault_scb") AS "scb_err_count",
+    sum("fault_other") AS "other_err_count",
+    sum("fault_scb") + sum("fault_ca") + sum("fault_other") AS "err_count",
+    count("trans_proxypan") AS "total_count"
   INTO "tds"."ops"."transtats"
   FROM "tds"."raw"."transactions"
   GROUP BY time(5m), "country" FILL(null)
