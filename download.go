@@ -15,7 +15,7 @@ import (
 
 const ProgramMaxRuntime = 300 * time.Second
 
-func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOption chromedp.Option, debug bool) {
+func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOption chromedp.Option, trace bool) {
 	var err error
 
 	ctx, cancel := context.WithTimeout(context.Background(), ProgramMaxRuntime)
@@ -23,7 +23,7 @@ func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOp
 
 	// create chrome instance
 	var c *chromedp.CDP
-	if debug {
+	if trace {
 		c, err = chromedp.New(ctx, chromeOption, chromedp.WithLog(log.Printf))
 	} else {
 		c, err = chromedp.New(ctx, chromeOption)
@@ -153,8 +153,8 @@ func fetchTransactionList(env Env) func(context.Context, *chromedp.CDP) error {
 func waitForDownload(debug bool) error {
 	wait := 10 * time.Second
 	if runtime.GOOS == "windows" {
-		// on Windows. fanotify event fires very infrequently
-		wait = 20 * time.Second
+		// on Windows. fsnotify event fires very infrequently
+		wait = 60 * time.Second
 	}
 
 	watcher, err := fsnotify.NewWatcher()
@@ -178,13 +178,22 @@ func waitForDownload(debug bool) error {
 
 			if strings.Contains(event.Name, "AllTransactions") {
 				transactionFile = event.Name
+
+				if runtime.GOOS == "windows" && event.Op&fsnotify.Rename == fsnotify.Rename {
+					transactionFile = strings.Trim(event.Name, ".crdownload")
+					time.Sleep(1 * time.Second)
+					return nil
+				}
 			}
+
 		case err := <-watcher.Errors:
 			return err
 		case <-time.After(wait):
-			// wait for some time. if any event received in last 15s, keep waiting
-			// if not, return, assuming nothing more is going to be written
 			log.Printf("...download stopped for %s...", transactionFile)
+			// do not return incomplete download
+			if strings.Contains(transactionFile, "crdownload") {
+				transactionFile = ""
+			}
 			return nil
 		}
 	}
