@@ -15,6 +15,12 @@ import (
 
 const ProgramMaxRuntime = 300 * time.Second
 
+var transactionFile string
+
+func GetTransactionFile() string {
+	return transactionFile
+}
+
 func runWithChrome(taskFunc func(context.Context, *chromedp.CDP) error, chromeOption chromedp.Option, trace bool) {
 	var err error
 

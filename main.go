@@ -20,7 +20,7 @@ type Env struct {
 	headless, prod, debug, trace    bool
 }
 
-var transactionFile, influxdbUrl string
+var influxdbUrl string
 
 func cwd() string {
 	dir, err := os.Getwd()
