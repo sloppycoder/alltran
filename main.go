@@ -17,7 +17,7 @@ const MaxDownloadAttempts = 3
 type Env struct {
 	url, username, password, period string
 	proxy                           string
-	headless, prod, debug           bool
+	headless, prod, debug, trace    bool
 }
 
 var transactionFile, influxdbUrl string
@@ -35,12 +35,13 @@ func parseParameters() Env {
 
 	flag.BoolVar(&env.prod, "prod", false, "production mode")
 	flag.BoolVar(&env.debug, "v", false, "print debug logs")
+	flag.BoolVar(&env.trace, "vv", false, "print trace logs")
 	flag.BoolVar(&env.headless, "headless", false, "use Chrome headless mode")
 	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
 	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")
 	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
-	flag.StringVar(&influxdbUrl, "influxdb", "http://127.0.0.1:8086", "InfluxDB URL to send transaction records to")
+	flag.StringVar(&influxdbUrl, "influxdb", "", "InfluxDB URL to send transaction records to. Empty value disables the upload.")
 	flag.StringVar(&transactionFile, "csv", "", "CSV file to process. Specify file here will bypass the download logic")
 
 	flag.Parse()
@@ -84,7 +85,7 @@ func main() {
 	if transactionFile == "" {
 		chromeOptions := chromedp.WithRunnerOptions(options...)
 		for i := 0; i < MaxDownloadAttempts; i++ {
-			runWithChrome(fetchTransactionList(env), chromeOptions, env.debug)
+			runWithChrome(fetchTransactionList(env), chromeOptions, env.trace)
 
 			if transactionFile != "" {
 				log.Println("Downloaded ", transactionFile)
