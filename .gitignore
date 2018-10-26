@@ -1,4 +1,5 @@
 .idea/
+.vagrant
 *.exe
 3ds_download
 *.csv

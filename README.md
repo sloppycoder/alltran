@@ -31,3 +31,6 @@ go build
 GOOS=windows GOBARCH=amd64 go build
 
 ```
+
+## Don't have a Linux machine to test?
+Spin a CentOS 7 VM with Chrome by running ```vagrant up```
