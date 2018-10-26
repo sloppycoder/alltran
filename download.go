@@ -179,7 +179,7 @@ func waitForDownload(debug bool) error {
 			if strings.Contains(event.Name, "AllTransactions") {
 				transactionFile = event.Name
 
-				if runtime.GOOS == "windows" && event.Op&fsnotify.Rename == fsnotify.Rename {
+				if event.Op&fsnotify.Rename == fsnotify.Rename {
 					transactionFile = strings.Trim(event.Name, ".crdownload")
 					time.Sleep(1 * time.Second)
 					return nil
