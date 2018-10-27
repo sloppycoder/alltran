@@ -6,6 +6,7 @@ import (
 	"flag"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/runner"
+	_ "github.com/joho/godotenv/autoload"
 	"log"
 	"os"
 	"runtime"
@@ -15,9 +16,10 @@ import (
 const MaxDownloadAttempts = 3
 
 type Env struct {
-	url, username, password, period string
-	proxy                           string
-	headless, prod, debug, trace    bool
+	url, username, password string
+	period                  string
+	proxy                   string
+	headless, debug, trace  bool
 }
 
 var influxdbUrl string
@@ -30,30 +32,38 @@ func cwd() string {
 	return dir
 }
 
+func getHttpProxyFromEnv() string {
+	proxy := os.Getenv("HTTP_PROXY")
+	if proxy == "" {
+		proxy = os.Getenv("http_proxy")
+	}
+	return proxy
+}
+
 func parseParameters() Env {
 	env := Env{}
+	env.url = os.Getenv("ARCOT_URL")
+	env.username = os.Getenv("ARCOT_USERNAME")
+	env.password = os.Getenv("ARCOT_PASSWORD")
+	influxdbUrl = os.Getenv("INFLUXDB_URL")
 
-	flag.BoolVar(&env.prod, "prod", false, "production mode")
 	flag.BoolVar(&env.debug, "v", false, "print debug logs")
 	flag.BoolVar(&env.trace, "vv", false, "print trace logs")
 	flag.BoolVar(&env.headless, "headless", false, "use Chrome headless mode")
-	flag.StringVar(&env.username, "u", "scb3ds_global2", "username")
-	flag.StringVar(&env.password, "p", "yahoo1234!", "password")
 	flag.StringVar(&env.period, "period", "60", "")
-	flag.StringVar(&env.proxy, "proxy", "", "proxy server")
-	flag.StringVar(&influxdbUrl, "influxdb", "", "InfluxDB URL to send transaction records to. Empty value disables the upload.")
+	flag.StringVar(&env.proxy, "proxy", getHttpProxyFromEnv(), "proxy server")
+	flag.StringVar(&influxdbUrl, "influxdb", influxdbUrl, "InfluxDB URL to send transaction records to. Empty value disables the upload.")
 	flag.StringVar(&transactionFile, "csv", "", "CSV file to process. Specify file here will bypass the download logic")
-
 	flag.Parse()
 
-	if env.prod {
-		env.url = "https://secure5.arcot.com/vpas/admin/"
-	} else {
-		env.url = "https://preview5.arcot.com/vpas/admin/"
+	if env.trace {
+		env.debug = true
 	}
 
 	if env.debug {
-		log.Printf("env = %+v", env)
+		denv := env
+		denv.password = "****"
+		log.Printf("env = %+v", denv)
 	}
 
 	return env

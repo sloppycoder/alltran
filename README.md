@@ -2,14 +2,22 @@
 
 ### TL;DR
 
-Make sure Chrome browser is installed
+Make sure Chrome browser is installed.
+Ceate a .env file to store URL, username and password
 
 ```
+ARCOT_URL=https://secure5.arcot.com/vpas/admin/
+ARCOT_URL=https://preview5.arcot.com/vpas/admin/
+ARCOT_USERNAME=scb3ds_global2
+ARCOT_PASSWORD=yahoo1234!
+```
+
+Then
+
+```
+
 # download last 30 minutes transaction from preview site
 ./alltran
-
-# download last 30 minutes transaction from production site
-./alltran -prod -u userid -p passoword
 
 # display all command line options
 ./alltran -h

@@ -6,4 +6,5 @@
 *.bat
 vendor/
 alltran*
+.env*
 
