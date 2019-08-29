@@ -26,11 +26,9 @@ Then
 ### Build
 This program is written using [Go programming language](http://golang.org). It uses the new [chromedp](https://github.com/chromedp/chromedp) driver. No JRE, Selenium or chrome driver required.
 
-[Dep](https://github.com/golang/dep) is required.
-
 ```
 
-dep ensure
+go get
 
 # build binary for your OS
 go build
